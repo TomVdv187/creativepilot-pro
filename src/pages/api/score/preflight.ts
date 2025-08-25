@@ -98,12 +98,14 @@ async function scoreFile(file: any, context: any): Promise<PerformanceScore> {
   // In production, this would analyze the uploaded file
   // For now, simulate scoring based on file metadata
   
-  const formatBonus = {
+  const formatBonusMap: Record<string, number> = {
     'image/jpeg': 5,
     'image/png': 3,
     'video/mp4': 10,
     'image/gif': -2
-  }[file.metadata?.mimeType] || 0;
+  };
+  
+  const formatBonus = formatBonusMap[file.metadata?.mimeType] || 0;
 
   const baseScore = 50 + formatBonus + Math.random() * 40;
   const uncertainty = Math.random() * 20 + 5;
