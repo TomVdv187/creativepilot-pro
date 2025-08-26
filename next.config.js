@@ -3,10 +3,17 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   images: {
-    domains: ['api.creativepilot.pro', 'assets.creativepilot.pro'],
+    domains: [
+      'source.unsplash.com', 
+      'via.placeholder.com',
+      'oaidalleapiprodscus.blob.core.windows.net', // OpenAI DALL-E images
+      'api.creativepilot.pro', 
+      'assets.creativepilot.pro'
+    ],
+    unoptimized: true, // For external image sources
   },
   env: {
-    CUSTOM_KEY: process.env.CUSTOM_KEY,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   },
   async rewrites() {
     return [
@@ -15,6 +22,14 @@ const nextConfig = {
         destination: '/api/:path*',
       },
     ];
+  },
+  // Ensure TypeScript paths work in production
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@': require('path').resolve(__dirname, 'src'),
+    };
+    return config;
   },
 };
 

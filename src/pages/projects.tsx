@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
+import Navigation from '@/components/Navigation';
 
 interface Project {
   id: string;
@@ -172,23 +173,8 @@ const ProjectsPage: React.FC = () => {
         <title>Projects - CreativePilot Pro</title>
       </Head>
 
-      <div className="min-h-screen bg-gray-50">
-        {/* Header */}
-        <header className="bg-white shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center py-4">
-              <Link href="/" className="text-xl font-bold text-gray-900">
-                CreativePilot Pro
-              </Link>
-              <nav className="flex space-x-6">
-                <Link href="/dashboard" className="text-gray-600 hover:text-gray-900">Dashboard</Link>
-                <Link href="/generate" className="text-gray-600 hover:text-gray-900">Generate</Link>
-                <Link href="/projects" className="text-indigo-600 font-medium">Projects</Link>
-                <Link href="/insights" className="text-gray-600 hover:text-gray-900">Insights</Link>
-              </nav>
-            </div>
-          </div>
-        </header>
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-green-50">
+        <Navigation />
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Header with create button */}
