@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
+import Navigation from '@/components/Navigation';
+import { imageGenService } from '@/services/imageGeneration';
 
 interface GeneratedCreative {
   id: string;
@@ -12,11 +14,22 @@ interface GeneratedCreative {
   headline: string;
   description: string;
   cta: string;
+  prompt?: string;
+  brandId?: string;
+}
+
+interface Brand {
+  id: string;
+  name: string;
+  colors: { primary: string; secondary: string; accent: string; };
+  primaryLogo?: string;
 }
 
 const GeneratePage: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedCreatives, setGeneratedCreatives] = useState<GeneratedCreative[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [selectedBrandId, setSelectedBrandId] = useState<string>('');
   const [formData, setFormData] = useState({
     format: 'static',
     angles: ['benefit', 'social-proof'],
@@ -24,8 +37,29 @@ const GeneratePage: React.FC = () => {
     productName: '',
     targetAudience: '',
     keyBenefit: '',
-    callToAction: 'Shop Now'
+    industry: '',
+    callToAction: 'Shop Now',
+    style: 'professional' as 'professional' | 'casual' | 'modern' | 'vintage'
   });
+
+  useEffect(() => {
+    // Load available brands
+    const mockBrands: Brand[] = [
+      {
+        id: '1',
+        name: 'TechStart Inc.',
+        colors: { primary: '#3B82F6', secondary: '#1E40AF', accent: '#F59E0B' },
+        primaryLogo: '/api/placeholder/150/60'
+      },
+      {
+        id: '2', 
+        name: 'EcoLife Products',
+        colors: { primary: '#10B981', secondary: '#059669', accent: '#F59E0B' },
+        primaryLogo: '/api/placeholder/150/60'
+      }
+    ];
+    setBrands(mockBrands);
+  }, []);
 
   const angles = [
     { id: 'benefit', label: 'Key Benefit', description: 'Highlight main product benefit' },
@@ -53,25 +87,63 @@ const GeneratePage: React.FC = () => {
 
     setIsGenerating(true);
     
-    // Simulate API call
     try {
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      const mockCreatives: GeneratedCreative[] = Array.from({ length: formData.count }, (_, i) => ({
-        id: `creative-${Date.now()}-${i}`,
-        format: formData.format,
-        angle: formData.angles[i % formData.angles.length],
-        score: Math.floor(65 + Math.random() * 30),
-        winProbability: 0.6 + Math.random() * 0.35,
-        imageUrl: `https://picsum.photos/400/300?random=${i}`,
-        headline: generateHeadline(formData.productName, formData.keyBenefit, formData.angles[i % formData.angles.length]),
-        description: generateDescription(formData.productName, formData.keyBenefit, formData.targetAudience),
-        cta: formData.callToAction
-      }));
+      const selectedBrand = brands.find(b => b.id === selectedBrandId);
+      const creatives: GeneratedCreative[] = [];
 
-      setGeneratedCreatives(mockCreatives);
+      for (let i = 0; i < formData.count; i++) {
+        const angle = formData.angles[i % formData.angles.length];
+        
+        try {
+          // Generate image with AI
+          const generatedImage = await imageGenService.generateImage({
+            productName: formData.productName,
+            keyBenefit: formData.keyBenefit,
+            targetAudience: formData.targetAudience,
+            angle,
+            format: formData.format,
+            brandColors: selectedBrand?.colors,
+            style: formData.style,
+            industry: formData.industry
+          });
+
+          const creative: GeneratedCreative = {
+            id: `creative-${Date.now()}-${i}`,
+            format: formData.format,
+            angle,
+            score: Math.floor(65 + Math.random() * 30),
+            winProbability: 0.6 + Math.random() * 0.35,
+            imageUrl: generatedImage.url,
+            headline: generateHeadline(formData.productName, formData.keyBenefit, angle),
+            description: generateDescription(formData.productName, formData.keyBenefit, formData.targetAudience),
+            cta: formData.callToAction,
+            prompt: generatedImage.prompt,
+            brandId: selectedBrandId
+          };
+
+          creatives.push(creative);
+        } catch (error) {
+          console.error('Failed to generate image for creative', i, error);
+          // Fallback to placeholder
+          creatives.push({
+            id: `creative-${Date.now()}-${i}`,
+            format: formData.format,
+            angle,
+            score: Math.floor(65 + Math.random() * 30),
+            winProbability: 0.6 + Math.random() * 0.35,
+            imageUrl: `https://source.unsplash.com/400x300/?${formData.productName.replace(/\s+/g, ',')}`,
+            headline: generateHeadline(formData.productName, formData.keyBenefit, angle),
+            description: generateDescription(formData.productName, formData.keyBenefit, formData.targetAudience),
+            cta: formData.callToAction,
+            brandId: selectedBrandId
+          });
+        }
+      }
+
+      setGeneratedCreatives(creatives);
     } catch (error) {
       alert('Generation failed. Please try again.');
+      console.error(error);
     } finally {
       setIsGenerating(false);
     }
@@ -99,83 +171,155 @@ const GeneratePage: React.FC = () => {
         <title>Generate Creatives - CreativePilot Pro</title>
       </Head>
 
-      <div className="min-h-screen bg-gray-50">
-        {/* Header */}
-        <header className="bg-white shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center py-4">
-              <Link href="/" className="text-xl font-bold text-gray-900">
-                CreativePilot Pro
-              </Link>
-              <nav className="flex space-x-6">
-                <Link href="/dashboard" className="text-gray-600 hover:text-gray-900">Dashboard</Link>
-                <Link href="/generate" className="text-indigo-600 font-medium">Generate</Link>
-                <Link href="/projects" className="text-gray-600 hover:text-gray-900">Projects</Link>
-                <Link href="/insights" className="text-gray-600 hover:text-gray-900">Insights</Link>
-              </nav>
-            </div>
-          </div>
-        </header>
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-indigo-50">
+        <Navigation />
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="grid lg:grid-cols-3 gap-8">
             {/* Generation Form */}
             <div className="lg:col-span-1">
-              <div className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-lg font-semibold mb-4">Generate Creatives</h2>
+              <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
+                <div className="flex items-center space-x-2 mb-6">
+                  <div className="w-8 h-8 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center">
+                    <span className="text-white text-sm">✨</span>
+                  </div>
+                  <h2 className="text-2xl font-bold text-gray-900">AI Creative Studio</h2>
+                </div>
                 
-                <div className="space-y-4">
+                <div className="space-y-6">
+                  {/* Brand Selection */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-semibold text-gray-700 mb-3">
+                      Select Brand
+                    </label>
+                    <div className="grid grid-cols-1 gap-3">
+                      <div 
+                        onClick={() => setSelectedBrandId('')}
+                        className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                          selectedBrandId === '' 
+                            ? 'border-indigo-500 bg-indigo-50' 
+                            : 'border-gray-200 hover:border-indigo-200'
+                        }`}
+                      >
+                        <div className="text-sm font-medium">No Brand</div>
+                        <div className="text-xs text-gray-500">Generate without brand guidelines</div>
+                      </div>
+                      {brands.map(brand => (
+                        <div
+                          key={brand.id}
+                          onClick={() => setSelectedBrandId(brand.id)}
+                          className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                            selectedBrandId === brand.id 
+                              ? 'border-indigo-500 bg-indigo-50' 
+                              : 'border-gray-200 hover:border-indigo-200'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="text-sm font-medium">{brand.name}</div>
+                              <div className="flex space-x-1 mt-1">
+                                <div className="w-3 h-3 rounded-full" style={{backgroundColor: brand.colors.primary}}></div>
+                                <div className="w-3 h-3 rounded-full" style={{backgroundColor: brand.colors.secondary}}></div>
+                                <div className="w-3 h-3 rounded-full" style={{backgroundColor: brand.colors.accent}}></div>
+                              </div>
+                            </div>
+                            {selectedBrandId === brand.id && (
+                              <div className="text-indigo-600 text-lg">✓</div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <Link 
+                      href="/brands" 
+                      className="inline-flex items-center text-sm text-indigo-600 hover:text-indigo-700 mt-2"
+                    >
+                      + Add new brand
+                    </Link>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
                       Product Name *
                     </label>
                     <input
                       type="text"
                       value={formData.productName}
                       onChange={(e) => setFormData(prev => ({ ...prev, productName: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
                       placeholder="e.g. SuperSkin Cream"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
                       Key Benefit *
                     </label>
                     <input
                       type="text"
                       value={formData.keyBenefit}
                       onChange={(e) => setFormData(prev => ({ ...prev, keyBenefit: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      placeholder="e.g. Reduces wrinkles"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                      placeholder="e.g. Reduces wrinkles in 7 days"
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Target Audience
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.targetAudience}
-                      onChange={(e) => setFormData(prev => ({ ...prev, targetAudience: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      placeholder="e.g. Women 35-50"
-                    />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Target Audience
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.targetAudience}
+                        onChange={(e) => setFormData(prev => ({ ...prev, targetAudience: e.target.value }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                        placeholder="e.g. Women 35-50"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Industry
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.industry}
+                        onChange={(e) => setFormData(prev => ({ ...prev, industry: e.target.value }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                        placeholder="e.g. Skincare"
+                      />
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Format</label>
-                    <select
-                      value={formData.format}
-                      onChange={(e) => setFormData(prev => ({ ...prev, format: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    >
-                      <option value="static">Static Image</option>
-                      <option value="video">Video</option>
-                      <option value="carousel">Carousel</option>
-                      <option value="story">Story</option>
-                    </select>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Format</label>
+                      <select
+                        value={formData.format}
+                        onChange={(e) => setFormData(prev => ({ ...prev, format: e.target.value }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                      >
+                        <option value="static">🖼️ Static Image</option>
+                        <option value="video">🎥 Video</option>
+                        <option value="carousel">📱 Carousel</option>
+                        <option value="story">📚 Story</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Style</label>
+                      <select
+                        value={formData.style}
+                        onChange={(e) => setFormData(prev => ({ ...prev, style: e.target.value as any }))}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                      >
+                        <option value="professional">🏢 Professional</option>
+                        <option value="casual">👥 Casual</option>
+                        <option value="modern">✨ Modern</option>
+                        <option value="vintage">🕰️ Vintage</option>
+                      </select>
+                    </div>
                   </div>
 
                   <div>

@@ -51,15 +51,15 @@ const HomePage: React.FC = () => {
             <div className="flex justify-center space-x-4">
               <Link 
                 href="/dashboard" 
-                className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-medium hover:bg-indigo-700 transition-colors"
+                className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-8 py-4 rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all transform hover:scale-105 shadow-lg"
               >
-                Get Started
+                Start Creating →
               </Link>
               <Link 
-                href="/demo" 
-                className="border border-gray-300 text-gray-700 px-8 py-3 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                href="/generate" 
+                className="border-2 border-indigo-200 bg-white text-indigo-600 px-8 py-4 rounded-xl font-semibold hover:bg-indigo-50 transition-all shadow-lg"
               >
-                View Demo
+                Try Generator
               </Link>
             </div>
           </div>
