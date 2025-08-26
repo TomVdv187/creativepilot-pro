@@ -12,9 +12,10 @@ const nextConfig = {
     ],
     unoptimized: true, // For external image sources
   },
-  env: {
-    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-  },
+  // Environment variables are handled by Vercel directly
+  // env: {
+  //   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  // },
   async rewrites() {
     return [
       {
