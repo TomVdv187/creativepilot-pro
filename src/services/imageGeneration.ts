@@ -50,7 +50,9 @@ export class ImageGenerationService {
     } catch (error) {
       console.error('Image generation error:', error);
       // Fallback to Unsplash with context
-      return this.generateFallbackImage(params);
+      const fallbackPrompt = `${params.productName} ${params.keyBenefit}`;
+      const fallbackDimensions = { width: 800, height: 600 };
+      return this.generateFallbackImage(params, fallbackPrompt, fallbackDimensions);
     }
   }
 
