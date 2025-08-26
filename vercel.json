@@ -1,8 +1,7 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": ".next",
-  "installCommand": "npm install",
   "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
   "functions": {
     "src/pages/api/**/*.ts": {
       "runtime": "nodejs18.x"
@@ -10,10 +9,5 @@
   },
   "env": {
     "OPENAI_API_KEY": "@openai-api-key"
-  },
-  "build": {
-    "env": {
-      "OPENAI_API_KEY": "@openai-api-key"
-    }
   }
 }
