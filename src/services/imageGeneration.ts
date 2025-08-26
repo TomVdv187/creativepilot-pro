@@ -18,13 +18,6 @@ interface GeneratedImage {
 
 export class ImageGenerationService {
   private static instance: ImageGenerationService;
-  private apiKey: string;
-  private baseUrl: string;
-
-  constructor() {
-    this.apiKey = process.env.OPENAI_API_KEY || '';
-    this.baseUrl = 'https://api.openai.com/v1/images/generations';
-  }
 
   static getInstance(): ImageGenerationService {
     if (!this.instance) {
@@ -34,41 +27,30 @@ export class ImageGenerationService {
   }
 
   async generateImage(params: GenerationParams): Promise<GeneratedImage> {
-    const prompt = this.buildPrompt(params);
-    const dimensions = this.getDimensions(params.format);
-
     try {
-      // Try OpenAI DALL-E first
-      const response = await fetch(this.baseUrl, {
+      const response = await fetch('/api/generate-image', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          model: 'dall-e-3',
-          prompt: prompt,
-          n: 1,
-          size: `${dimensions.width}x${dimensions.height}`,
-          quality: 'hd',
-          style: 'natural'
-        })
+        body: JSON.stringify(params)
       });
 
       if (response.ok) {
         const data = await response.json();
         return {
-          url: data.data[0].url,
-          prompt: prompt,
-          style: 'photorealistic',
-          dimensions
+          url: data.url,
+          prompt: data.prompt,
+          style: data.style,
+          dimensions: data.dimensions
         };
       } else {
-        throw new Error('DALL-E API failed');
+        throw new Error('Image generation API failed');
       }
     } catch (error) {
-      console.warn('DALL-E failed, trying Stability AI...', error);
-      return this.generateWithStabilityAI(params, prompt, dimensions);
+      console.error('Image generation error:', error);
+      // Fallback to Unsplash with context
+      return this.generateFallbackImage(params);
     }
   }
 
