@@ -1,184 +1,223 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
-import Navigation from '@/components/Navigation';
+import Sidebar from '@/components/Sidebar';
+import { BrandKitService } from '@/services/brandKitService';
+import { Brand, Asset } from '@/types';
 
-interface BrandAsset {
-  id: string;
-  type: 'logo' | 'font' | 'color' | 'template';
+interface BrandFormData {
   name: string;
-  url?: string;
-  value?: string;
-  metadata?: any;
-  createdAt: string;
-}
-
-interface Brand {
-  id: string;
-  name: string;
-  description: string;
-  primaryLogo?: string;
-  secondaryLogo?: string;
-  colors: { primary: string; secondary: string; accent: string; };
-  fonts: { heading: string; body: string; };
-  assets: BrandAsset[];
+  tone: string;
   guidelines: string;
-  createdAt: string;
-  updatedAt: string;
+  colors: { name: string; hex: string; }[];
+  fonts: { family: string; weights: number[]; }[];
 }
 
 const BrandsPage: React.FC = () => {
-  const [brands, setBrands] = useState<Brand[]>([
-    {
-      id: '1',
-      name: 'TechStart Inc.',
-      description: 'Innovative tech startup focused on AI solutions',
-      primaryLogo: '/api/placeholder/150/60',
-      colors: { primary: '#3B82F6', secondary: '#1E40AF', accent: '#F59E0B' },
-      fonts: { heading: 'Inter', body: 'Inter' },
-      assets: [],
-      guidelines: 'Modern, clean, tech-focused brand identity',
-      createdAt: '2024-01-15',
-      updatedAt: '2024-01-20'
-    },
-    {
-      id: '2', 
-      name: 'EcoLife Products',
-      description: 'Sustainable lifestyle and eco-friendly products',
-      primaryLogo: '/api/placeholder/150/60',
-      colors: { primary: '#10B981', secondary: '#059669', accent: '#F59E0B' },
-      fonts: { heading: 'Poppins', body: 'Open Sans' },
-      assets: [],
-      guidelines: 'Natural, sustainable, earth-friendly messaging',
-      createdAt: '2024-01-10',
-      updatedAt: '2024-01-18'
-    }
-  ]);
-  
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [loading, setLoading] = useState(true);
+  const brandService = BrandKitService.getInstance();
   const [selectedBrand, setSelectedBrand] = useState<Brand | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
-  const [newBrand, setNewBrand] = useState({
+  const [newBrand, setNewBrand] = useState<BrandFormData>({
     name: '',
-    description: '',
-    colors: { primary: '#3B82F6', secondary: '#1E40AF', accent: '#F59E0B' },
-    fonts: { heading: 'Inter', body: 'Inter' },
-    guidelines: ''
+    tone: '',
+    guidelines: '',
+    colors: [
+      { name: 'Primary', hex: '#3B82F6' },
+      { name: 'Secondary', hex: '#1E40AF' },
+      { name: 'Accent', hex: '#F59E0B' }
+    ],
+    fonts: [
+      { family: 'Inter', weights: [400, 500, 600, 700] }
+    ]
   });
 
-  const handleLogoUpload = useCallback(async (brandId: string, file: File, type: 'primary' | 'secondary') => {
+  useEffect(() => {
+    loadBrands();
+  }, []);
+
+  const loadBrands = async () => {
+    try {
+      setLoading(true);
+      const brandsData = await brandService.getAllBrands('ws_1');
+      setBrands(brandsData);
+    } catch (error) {
+      console.error('Failed to load brands:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogoUpload = useCallback(async (brandId: string, file: File) => {
     setUploadingLogo(true);
     
-    // Simulate upload process
-    const formData = new FormData();
-    formData.append('logo', file);
-    formData.append('type', type);
-    
     try {
-      // In production, this would upload to your storage service
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Create a temporary URL for demo
-      const tempUrl = URL.createObjectURL(file);
+      const asset = await brandService.uploadAsset(brandId, file, 'logo');
       
       setBrands(prev => prev.map(brand => 
         brand.id === brandId 
           ? { 
               ...brand, 
-              [type === 'primary' ? 'primaryLogo' : 'secondaryLogo']: tempUrl,
-              updatedAt: new Date().toISOString().split('T')[0]
+              kit: {
+                ...brand.kit,
+                logos: [...brand.kit.logos, asset]
+              },
+              updatedAt: new Date()
             }
           : brand
       ));
     } catch (error) {
       alert('Upload failed. Please try again.');
+      console.error('Upload error:', error);
     } finally {
       setUploadingLogo(false);
     }
-  }, []);
+  }, [brandService]);
 
   const createBrand = async () => {
     if (!newBrand.name.trim()) return;
 
-    const brand: Brand = {
-      id: Date.now().toString(),
-      name: newBrand.name,
-      description: newBrand.description,
-      colors: newBrand.colors,
-      fonts: newBrand.fonts,
-      assets: [],
-      guidelines: newBrand.guidelines,
-      createdAt: new Date().toISOString().split('T')[0],
-      updatedAt: new Date().toISOString().split('T')[0]
-    };
+    try {
+      const brandData = {
+        workspaceId: 'ws_1',
+        name: newBrand.name,
+        tone: newBrand.tone,
+        kit: {
+          logos: [],
+          colors: newBrand.colors.map(c => ({
+            ...c,
+            rgb: hexToRgb(c.hex)
+          })),
+          fonts: newBrand.fonts.map(f => ({
+            ...f,
+            url: getFontUrl(f.family)
+          })),
+          guidelines: newBrand.guidelines
+        },
+        compliancePack: {
+          vertical: 'General',
+          region: 'US',
+          prohibitedClaims: [],
+          requiredDisclosures: [],
+          policyRules: []
+        },
+        rights: {
+          defaultLicense: 'Proprietary',
+          autoExpiry: false,
+          alertDaysBefore: 30
+        }
+      };
 
-    setBrands(prev => [brand, ...prev]);
-    setShowCreateModal(false);
+      const createdBrand = await brandService.createBrand(brandData);
+      setBrands(prev => [createdBrand, ...prev]);
+      setShowCreateModal(false);
+      resetForm();
+    } catch (error) {
+      alert('Failed to create brand. Please try again.');
+      console.error('Create brand error:', error);
+    }
+  };
+
+  const resetForm = () => {
     setNewBrand({
       name: '',
-      description: '',
-      colors: { primary: '#3B82F6', secondary: '#1E40AF', accent: '#F59E0B' },
-      fonts: { heading: 'Inter', body: 'Inter' },
-      guidelines: ''
+      tone: '',
+      guidelines: '',
+      colors: [
+        { name: 'Primary', hex: '#3B82F6' },
+        { name: 'Secondary', hex: '#1E40AF' },
+        { name: 'Accent', hex: '#F59E0B' }
+      ],
+      fonts: [
+        { family: 'Inter', weights: [400, 500, 600, 700] }
+      ]
     });
+  };
+
+  const hexToRgb = (hex: string) => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16)
+    } : { r: 0, g: 0, b: 0 };
+  };
+
+  const getFontUrl = (family: string) => {
+    const fontUrls: Record<string, string> = {
+      'Inter': 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
+      'Poppins': 'https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap',
+      'Open Sans': 'https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600&display=swap'
+    };
+    return fontUrls[family] || fontUrls['Inter'];
   };
 
   const deleteBrand = async (id: string) => {
     if (confirm('Are you sure you want to delete this brand?')) {
-      setBrands(prev => prev.filter(b => b.id !== id));
+      try {
+        await brandService.deleteBrand(id);
+        setBrands(prev => prev.filter(b => b.id !== id));
+      } catch (error) {
+        alert('Failed to delete brand. Please try again.');
+        console.error('Delete brand error:', error);
+      }
     }
   };
 
   const FileUpload: React.FC<{ 
     brandId: string; 
-    type: 'primary' | 'secondary';
-    currentLogo?: string;
+    currentAssets?: Asset[];
     label: string;
-  }> = ({ brandId, type, currentLogo, label }) => (
-    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-indigo-400 transition-colors">
-      <div className="text-center">
-        {currentLogo ? (
-          <div className="mb-4">
-            <img 
-              src={currentLogo} 
-              alt={`${label} logo`}
-              className="mx-auto max-h-16 object-contain"
-            />
-          </div>
-        ) : (
-          <div className="w-16 h-16 mx-auto bg-gray-100 rounded-lg flex items-center justify-center mb-4">
-            <span className="text-2xl">🎨</span>
-          </div>
-        )}
-        
-        <h4 className="text-sm font-medium text-gray-900 mb-2">{label}</h4>
-        <p className="text-xs text-gray-500 mb-4">PNG, JPG up to 2MB</p>
-        
-        <label className="inline-flex items-center px-4 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 cursor-pointer text-sm font-medium">
-          {uploadingLogo ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600 mr-2"></div>
-              Uploading...
-            </>
+  }> = ({ brandId, currentAssets, label }) => {
+    const currentLogo = currentAssets?.[0]?.url;
+    return (
+      <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-indigo-400 transition-colors">
+        <div className="text-center">
+          {currentLogo ? (
+            <div className="mb-4">
+              <img 
+                src={currentLogo} 
+                alt={`${label} logo`}
+                className="mx-auto max-h-16 object-contain"
+              />
+            </div>
           ) : (
-            <>
-              📤 {currentLogo ? 'Replace' : 'Upload'}
-            </>
+            <div className="w-16 h-16 mx-auto bg-gray-100 rounded-lg flex items-center justify-center mb-4">
+              <span className="text-2xl">🎨</span>
+            </div>
           )}
-          <input
-            type="file"
-            className="hidden"
-            accept="image/*"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleLogoUpload(brandId, file, type);
-            }}
-            disabled={uploadingLogo}
-          />
-        </label>
+          
+          <h4 className="text-sm font-medium text-gray-900 mb-2">{label}</h4>
+          <p className="text-xs text-gray-500 mb-4">PNG, JPG up to 2MB</p>
+          
+          <label className="inline-flex items-center px-4 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 cursor-pointer text-sm font-medium">
+            {uploadingLogo ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600 mr-2"></div>
+                Uploading...
+              </>
+            ) : (
+              <>
+                📤 {currentLogo ? 'Replace' : 'Upload'}
+              </>
+            )}
+            <input
+              type="file"
+              className="hidden"
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleLogoUpload(brandId, file);
+              }}
+              disabled={uploadingLogo}
+            />
+          </label>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <>
@@ -186,14 +225,21 @@ const BrandsPage: React.FC = () => {
         <title>Brand Management - CreativePilot Pro</title>
       </Head>
 
-      <div className="min-h-screen bg-gray-50">
-        <Navigation />
-
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <Sidebar>
+        <div className="bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 min-h-screen">
+          {loading ? (
+            <div className="flex items-center justify-center h-screen">
+              <div className="text-center">
+                <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
+                <p className="text-xl font-semibold text-gray-700">Loading brands...</p>
+              </div>
+            </div>
+          ) : (
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex justify-between items-center mb-8">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Brand Management</h1>
-              <p className="text-gray-600 mt-2">Manage logos, colors, fonts, and brand guidelines for consistent creatives</p>
+              <p className="text-gray-600 mt-2">Manage brand kits with logos, colors, fonts, tone, and compliance settings for consistent creatives</p>
             </div>
             <button
               onClick={() => setShowCreateModal(true)}
@@ -212,7 +258,7 @@ const BrandsPage: React.FC = () => {
                   <div className="flex items-start justify-between mb-6">
                     <div className="flex-1">
                       <h3 className="text-lg font-semibold text-gray-900 mb-1">{brand.name}</h3>
-                      <p className="text-sm text-gray-600">{brand.description}</p>
+                      <p className="text-sm text-gray-600">{brand.tone}</p>
                     </div>
                     <div className="flex space-x-2">
                       <button
@@ -233,9 +279,9 @@ const BrandsPage: React.FC = () => {
                   {/* Logo Preview */}
                   <div className="mb-6">
                     <div className="bg-gray-50 rounded-lg p-4 text-center">
-                      {brand.primaryLogo ? (
+                      {brand.kit.logos.length > 0 ? (
                         <img 
-                          src={brand.primaryLogo} 
+                          src={brand.kit.logos[0].url} 
                           alt={`${brand.name} logo`}
                           className="mx-auto max-h-12 object-contain"
                         />
@@ -248,31 +294,33 @@ const BrandsPage: React.FC = () => {
                   {/* Color Palette */}
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-gray-700 mb-3">Colors</h4>
-                    <div className="flex space-x-2">
-                      <div 
-                        className="w-8 h-8 rounded-full border-2 border-white shadow-sm"
-                        style={{ backgroundColor: brand.colors.primary }}
-                        title="Primary"
-                      ></div>
-                      <div 
-                        className="w-8 h-8 rounded-full border-2 border-white shadow-sm"
-                        style={{ backgroundColor: brand.colors.secondary }}
-                        title="Secondary"
-                      ></div>
-                      <div 
-                        className="w-8 h-8 rounded-full border-2 border-white shadow-sm"
-                        style={{ backgroundColor: brand.colors.accent }}
-                        title="Accent"
-                      ></div>
+                    <div className="flex flex-wrap gap-2">
+                      {brand.kit.colors.slice(0, 4).map((color, index) => (
+                        <div 
+                          key={index}
+                          className="w-8 h-8 rounded-full border-2 border-white shadow-sm"
+                          style={{ backgroundColor: color.hex }}
+                          title={color.name}
+                        ></div>
+                      ))}
+                      {brand.kit.colors.length > 4 && (
+                        <div className="w-8 h-8 rounded-full border-2 border-gray-200 bg-gray-100 flex items-center justify-center text-xs text-gray-600">
+                          +{brand.kit.colors.length - 4}
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   {/* Fonts */}
                   <div className="mb-6">
                     <h4 className="text-sm font-medium text-gray-700 mb-2">Typography</h4>
-                    <div className="text-xs text-gray-600">
-                      <div>Heading: {brand.fonts.heading}</div>
-                      <div>Body: {brand.fonts.body}</div>
+                    <div className="text-xs text-gray-600 space-y-1">
+                      {brand.kit.fonts.slice(0, 2).map((font, index) => (
+                        <div key={index}>{font.family}</div>
+                      ))}
+                      {brand.kit.fonts.length > 2 && (
+                        <div className="text-gray-500">+{brand.kit.fonts.length - 2} more</div>
+                      )}
                     </div>
                   </div>
 
@@ -297,7 +345,7 @@ const BrandsPage: React.FC = () => {
           </div>
 
           {/* Empty State */}
-          {brands.length === 0 && (
+          {brands.length === 0 && !loading && (
             <div className="text-center py-16">
               <div className="text-6xl mb-4">🎨</div>
               <h3 className="text-xl font-semibold text-gray-900 mb-2">No brands yet</h3>
@@ -310,9 +358,10 @@ const BrandsPage: React.FC = () => {
               </button>
             </div>
           )}
-        </main>
+          </main>
+          )}
 
-        {/* Create Brand Modal */}
+          {/* Create Brand Modal */}
         {showCreateModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -335,14 +384,14 @@ const BrandsPage: React.FC = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Industry/Description
+                        Brand Tone
                       </label>
                       <input
                         type="text"
-                        value={newBrand.description}
-                        onChange={(e) => setNewBrand(prev => ({ ...prev, description: e.target.value }))}
+                        value={newBrand.tone}
+                        onChange={(e) => setNewBrand(prev => ({ ...prev, tone: e.target.value }))}
                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                        placeholder="e.g. Tech startup"
+                        placeholder="e.g. Professional and approachable"
                       />
                     </div>
                   </div>
@@ -351,43 +400,32 @@ const BrandsPage: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Brand Colors
                     </label>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Primary</label>
-                        <input
-                          type="color"
-                          value={newBrand.colors.primary}
-                          onChange={(e) => setNewBrand(prev => ({
-                            ...prev,
-                            colors: { ...prev.colors, primary: e.target.value }
-                          }))}
-                          className="w-full h-12 rounded-lg border border-gray-300"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Secondary</label>
-                        <input
-                          type="color"
-                          value={newBrand.colors.secondary}
-                          onChange={(e) => setNewBrand(prev => ({
-                            ...prev,
-                            colors: { ...prev.colors, secondary: e.target.value }
-                          }))}
-                          className="w-full h-12 rounded-lg border border-gray-300"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Accent</label>
-                        <input
-                          type="color"
-                          value={newBrand.colors.accent}
-                          onChange={(e) => setNewBrand(prev => ({
-                            ...prev,
-                            colors: { ...prev.colors, accent: e.target.value }
-                          }))}
-                          className="w-full h-12 rounded-lg border border-gray-300"
-                        />
-                      </div>
+                    <div className="space-y-3">
+                      {newBrand.colors.map((color, index) => (
+                        <div key={index} className="flex items-center space-x-3">
+                          <input
+                            type="color"
+                            value={color.hex}
+                            onChange={(e) => {
+                              const updatedColors = [...newBrand.colors];
+                              updatedColors[index].hex = e.target.value;
+                              setNewBrand(prev => ({ ...prev, colors: updatedColors }));
+                            }}
+                            className="w-12 h-12 rounded-lg border border-gray-300"
+                          />
+                          <input
+                            type="text"
+                            value={color.name}
+                            onChange={(e) => {
+                              const updatedColors = [...newBrand.colors];
+                              updatedColors[index].name = e.target.value;
+                              setNewBrand(prev => ({ ...prev, colors: updatedColors }));
+                            }}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            placeholder="Color name"
+                          />
+                        </div>
+                      ))}
                     </div>
                   </div>
 
@@ -407,7 +445,10 @@ const BrandsPage: React.FC = () => {
 
                 <div className="flex space-x-4 mt-8">
                   <button
-                    onClick={() => setShowCreateModal(false)}
+                    onClick={() => {
+                      setShowCreateModal(false);
+                      resetForm();
+                    }}
                     className="flex-1 bg-gray-100 text-gray-700 py-3 px-6 rounded-xl font-semibold hover:bg-gray-200 transition-colors"
                   >
                     Cancel
@@ -447,15 +488,8 @@ const BrandsPage: React.FC = () => {
                     <div className="space-y-6">
                       <FileUpload
                         brandId={selectedBrand.id}
-                        type="primary"
-                        currentLogo={selectedBrand.primaryLogo}
-                        label="Primary Logo"
-                      />
-                      <FileUpload
-                        brandId={selectedBrand.id}
-                        type="secondary"
-                        currentLogo={selectedBrand.secondaryLogo}
-                        label="Secondary Logo"
+                        currentAssets={selectedBrand.kit.logos}
+                        label="Brand Logo"
                       />
                     </div>
                   </div>
@@ -467,36 +501,25 @@ const BrandsPage: React.FC = () => {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Colors</label>
                         <div className="grid grid-cols-3 gap-2">
-                          <div>
-                            <div 
-                              className="w-full h-12 rounded-lg border-2 border-white shadow-sm mb-1"
-                              style={{ backgroundColor: selectedBrand.colors.primary }}
-                            ></div>
-                            <div className="text-xs text-gray-600 text-center">Primary</div>
-                          </div>
-                          <div>
-                            <div 
-                              className="w-full h-12 rounded-lg border-2 border-white shadow-sm mb-1"
-                              style={{ backgroundColor: selectedBrand.colors.secondary }}
-                            ></div>
-                            <div className="text-xs text-gray-600 text-center">Secondary</div>
-                          </div>
-                          <div>
-                            <div 
-                              className="w-full h-12 rounded-lg border-2 border-white shadow-sm mb-1"
-                              style={{ backgroundColor: selectedBrand.colors.accent }}
-                            ></div>
-                            <div className="text-xs text-gray-600 text-center">Accent</div>
-                          </div>
+                          {selectedBrand.kit.colors.slice(0, 6).map((color, index) => (
+                            <div key={index}>
+                              <div 
+                                className="w-full h-12 rounded-lg border-2 border-white shadow-sm mb-1"
+                                style={{ backgroundColor: color.hex }}
+                              ></div>
+                              <div className="text-xs text-gray-600 text-center">{color.name}</div>
+                            </div>
+                          ))}
                         </div>
                       </div>
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Typography</label>
                         <div className="bg-gray-50 p-4 rounded-lg">
-                          <div className="text-sm">
-                            <div><strong>Heading:</strong> {selectedBrand.fonts.heading}</div>
-                            <div><strong>Body:</strong> {selectedBrand.fonts.body}</div>
+                          <div className="text-sm space-y-1">
+                            {selectedBrand.kit.fonts.map((font, index) => (
+                              <div key={index}><strong>{font.family}:</strong> {font.weights.join(', ')}</div>
+                            ))}
                           </div>
                         </div>
                       </div>
@@ -504,7 +527,7 @@ const BrandsPage: React.FC = () => {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Guidelines</label>
                         <div className="bg-gray-50 p-4 rounded-lg">
-                          <p className="text-sm text-gray-700">{selectedBrand.guidelines || 'No guidelines set'}</p>
+                          <p className="text-sm text-gray-700">{selectedBrand.kit.guidelines || 'No guidelines set'}</p>
                         </div>
                       </div>
                     </div>
@@ -513,7 +536,7 @@ const BrandsPage: React.FC = () => {
 
                 <div className="flex justify-between items-center mt-8 pt-6 border-t border-gray-200">
                   <div className="text-sm text-gray-500">
-                    Created: {selectedBrand.createdAt} | Updated: {selectedBrand.updatedAt}
+                    Created: {new Date(selectedBrand.createdAt).toLocaleDateString()} | Updated: {new Date(selectedBrand.updatedAt).toLocaleDateString()}
                   </div>
                   <div className="flex space-x-4">
                     <button
@@ -534,7 +557,8 @@ const BrandsPage: React.FC = () => {
             </div>
           </div>
         )}
-      </div>
+        </div>
+      </Sidebar>
     </>
   );
 };

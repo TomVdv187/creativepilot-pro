@@ -64,7 +64,7 @@ export interface Experiment {
   budgets: Budget[];
   guardrails: Guardrail[];
   outcomes: ExperimentOutcome[];
-  status: 'draft' | 'running' | 'completed' | 'stopped';
+  status: 'draft' | 'running' | 'completed' | 'stopped' | 'paused';
   createdAt: Date;
   updatedAt: Date;
 }

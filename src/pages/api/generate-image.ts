@@ -49,45 +49,99 @@ export default async function handler(
     const prompt = buildPrompt(params);
     const dimensions = getDimensions(params.format);
 
-    // Try OpenAI DALL-E first
-    if (process.env.OPENAI_API_KEY) {
-      try {
-        const dalleResponse = await fetch('https://api.openai.com/v1/images/generations', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'dall-e-3',
-            prompt: prompt.substring(0, 4000), // DALL-E prompt limit
-            n: 1,
-            size: getSizeString(dimensions),
-            quality: 'standard',
-            style: 'natural'
-          })
-        });
-
-        if (dalleResponse.ok) {
-          const data = await dalleResponse.json();
-          return res.status(200).json({
-            url: data.data[0].url,
-            prompt,
-            style: 'ai-generated',
-            dimensions,
-            success: true
+    // Try multiple AI image generation services in priority order
+    const imageServices = [
+      {
+        name: 'Pollinations',
+        generate: async () => {
+          const pollinationsUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${dimensions.width}&height=${dimensions.height}&seed=${Math.floor(Math.random() * 1000000)}&enhance=true&model=flux`;
+          
+          // Test if the URL is accessible with timeout
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          
+          const testResponse = await fetch(pollinationsUrl, { 
+            method: 'HEAD',
+            signal: controller.signal
           });
-        } else {
-          console.error('DALL-E API error:', await dalleResponse.text());
+          clearTimeout(timeoutId);
+          
+          if (testResponse.ok) {
+            return {
+              url: pollinationsUrl,
+              style: 'flux-generated'
+            };
+          }
+          throw new Error('Pollinations service unavailable');
         }
+      },
+      {
+        name: 'Replicate',
+        generate: async () => {
+          // In production, you'd use Replicate API here
+          // For now, return a placeholder that indicates this would be AI-generated
+          const replicateUrl = `https://replicate.delivery/pbxt/placeholder-${Math.random().toString(36).substr(2, 9)}.png`;
+          console.log('Would use Replicate API with key');
+          throw new Error('Replicate API key required');
+        }
+      },
+      {
+        name: 'Stability AI',
+        generate: async () => {
+          if (!process.env.STABILITY_API_KEY) {
+            throw new Error('Stability API key not configured');
+          }
+          
+          const response = await fetch('https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${process.env.STABILITY_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              text_prompts: [{ text: prompt, weight: 1 }],
+              cfg_scale: 7,
+              height: dimensions.height,
+              width: dimensions.width,
+              samples: 1,
+              steps: 30,
+            })
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const imageBase64 = data.artifacts[0].base64;
+            return {
+              url: `data:image/png;base64,${imageBase64}`,
+              style: 'stable-diffusion-xl'
+            };
+          }
+          throw new Error('Stability AI request failed');
+        }
+      }
+    ];
+
+    // Try each service in order
+    for (const service of imageServices) {
+      try {
+        console.log(`Attempting ${service.name}...`);
+        const result = await service.generate();
+        return res.status(200).json({
+          url: result.url,
+          prompt,
+          style: result.style,
+          dimensions,
+          success: true
+        });
       } catch (error) {
-        console.error('DALL-E request failed:', error);
+        console.log(`${service.name} failed:`, error instanceof Error ? error.message : String(error));
+        continue;
       }
     }
 
-    // Fallback to contextual Unsplash images
+    // Fallback to high-quality contextual Unsplash images
     const keywords = extractKeywords(params);
-    const unsplashUrl = `https://source.unsplash.com/${dimensions.width}x${dimensions.height}/?${keywords.join(',')}`;
+    const unsplashUrl = `https://source.unsplash.com/${dimensions.width}x${dimensions.height}/?${keywords.join(',')}&q=80`;
     
     return res.status(200).json({
       url: unsplashUrl,
@@ -100,10 +154,12 @@ export default async function handler(
   } catch (error) {
     console.error('Image generation error:', error);
     
-    // Ultimate fallback
-    const fallbackDimensions = { width: 800, height: 600 };
+    // Ultimate fallback - professional placeholder
+    const fallbackDimensions = { width: 1200, height: 630 };
+    const placeholderUrl = `https://via.placeholder.com/${fallbackDimensions.width}x${fallbackDimensions.height}/6366F1/FFFFFF?text=${encodeURIComponent('🎨 Creative Generated')}`;
+    
     return res.status(200).json({
-      url: `https://via.placeholder.com/${fallbackDimensions.width}x${fallbackDimensions.height}/3B82F6/FFFFFF?text=${encodeURIComponent('Creative Generated')}`,
+      url: placeholderUrl,
       prompt: 'Fallback placeholder',
       style: 'placeholder',
       dimensions: fallbackDimensions,
@@ -118,66 +174,63 @@ function buildPrompt(params: GenerationRequest): string {
   let prompt = '';
 
   // Base style and quality
-  prompt += `High-quality ${style} advertising creative for ${productName}, `;
+  prompt += `Professional ${style} advertising creative, `;
+  
+  // Product focus
+  prompt += `${productName} product showcase, `;
+  
+  // Key benefit
+  prompt += `highlighting "${keyBenefit}", `;
 
-  // Product and benefit focus
-  prompt += `showcasing ${keyBenefit}, `;
-
-  // Audience targeting
+  // Target audience context
   if (targetAudience) {
     prompt += `designed for ${targetAudience}, `;
   }
 
-  // Angle-specific elements
+  // Angle-specific styling
   switch (angle) {
     case 'social-proof':
-      prompt += 'featuring happy customers, testimonials, social validation, customer reviews, ';
+      prompt += 'customer testimonials, happy users, 5-star reviews, social validation, ';
       break;
     case 'urgency':
-      prompt += 'with urgent messaging, limited time elements, countdown timers, scarcity indicators, ';
+      prompt += 'limited time offer, countdown timer, urgent call-to-action, scarcity, ';
       break;
     case 'benefit':
-      prompt += 'clearly highlighting product benefits, results, improvements, value proposition, ';
+      prompt += 'clear product benefits, before and after, results demonstration, ';
       break;
     case 'comparison':
-      prompt += 'showing before and after comparison, transformation results, side-by-side benefits, ';
+      prompt += 'side-by-side comparison, versus competition, superiority, ';
       break;
     case 'lifestyle':
-      prompt += 'in lifestyle setting, everyday use scenario, relatable environment, ';
+      prompt += 'lifestyle photography, people using product, everyday scenarios, ';
       break;
     case 'problem-solution':
-      prompt += 'addressing problems, showing solutions, pain point resolution, ';
+      prompt += 'problem solving, pain point relief, solution demonstration, ';
       break;
   }
 
   // Industry context
   if (industry) {
-    prompt += `${industry} industry aesthetic, sector-appropriate styling, `;
+    prompt += `${industry} industry aesthetic, `;
   }
 
-  // Format considerations
+  // Format optimization
   switch (format) {
+    case 'story':
+      prompt += 'vertical mobile format, story optimized, ';
+      break;
     case 'video':
-      prompt += 'thumbnail-worthy composition, dynamic elements, video-ready layout, ';
+      prompt += 'video thumbnail ready, dynamic composition, ';
       break;
     case 'carousel':
-      prompt += 'clean layout suitable for social carousel, multiple focus points, ';
-      break;
-    case 'story':
-      prompt += 'vertical mobile-first composition, story format optimized, ';
+      prompt += 'carousel slide format, clean layout, ';
       break;
     default:
-      prompt += 'balanced horizontal composition, social media ready, ';
+      prompt += 'social media post format, ';
   }
 
-  // Brand colors (if provided)
-  if (brandColors) {
-    const colorDesc = hexToColorDescription(brandColors);
-    prompt += `incorporating ${colorDesc.join(' and ')} brand colors, `;
-  }
-
-  // Technical quality
-  prompt += 'professional photography style, clean background, high contrast, sharp focus, commercial quality, marketing ready, no text overlay, no watermarks';
+  // Quality specifications
+  prompt += 'high quality, commercial photography, professional lighting, clean background, marketing ready, no text overlay, modern design';
 
   return prompt;
 }
@@ -185,34 +238,27 @@ function buildPrompt(params: GenerationRequest): string {
 function getDimensions(format: string): { width: number; height: number; } {
   switch (format) {
     case 'story':
-      return { width: 1024, height: 1792 }; // Close to 9:16 within DALL-E limits
+      return { width: 1080, height: 1920 }; // 9:16 vertical
     case 'video':
-      return { width: 1792, height: 1024 }; // Close to 16:9 within DALL-E limits  
+      return { width: 1920, height: 1080 }; // 16:9 horizontal
     case 'carousel':
-      return { width: 1024, height: 1024 }; // 1:1 square
+      return { width: 1080, height: 1080 }; // 1:1 square
     default: // static
-      return { width: 1792, height: 1024 }; // Wide format for social
+      return { width: 1200, height: 630 }; // Social media optimal
   }
-}
-
-function getSizeString(dimensions: { width: number; height: number; }): string {
-  // DALL-E 3 only supports specific sizes
-  if (dimensions.width === dimensions.height) return '1024x1024';
-  if (dimensions.width > dimensions.height) return '1792x1024';
-  return '1024x1792';
 }
 
 function extractKeywords(params: GenerationRequest): string[] {
   const keywords = [];
   
-  // Product-related
+  // Product name keywords
   if (params.productName) {
-    keywords.push(...params.productName.toLowerCase().split(/\s+/).slice(0, 2));
+    keywords.push(...params.productName.toLowerCase().split(/\s+/).filter(w => w.length > 2));
   }
   
-  // Benefit-related
+  // Benefit keywords
   if (params.keyBenefit) {
-    keywords.push(...params.keyBenefit.toLowerCase().split(/\s+/).slice(0, 2));
+    keywords.push(...params.keyBenefit.toLowerCase().split(/\s+/).filter(w => w.length > 2).slice(0, 2));
   }
 
   // Industry
@@ -220,57 +266,22 @@ function extractKeywords(params: GenerationRequest): string[] {
     keywords.push(params.industry.toLowerCase());
   }
 
-  // Style
+  // Style and angle
   keywords.push(params.style || 'professional');
+  keywords.push('advertising', 'marketing');
 
-  // Angle-specific
+  // Angle-specific keywords
   switch (params.angle) {
     case 'social-proof':
-      keywords.push('happy', 'people');
+      keywords.push('testimonial', 'reviews');
       break;
     case 'lifestyle':
-      keywords.push('lifestyle', 'modern');
+      keywords.push('lifestyle', 'people');
       break;
-    case 'professional':
-      keywords.push('business', 'office');
+    case 'benefit':
+      keywords.push('results', 'benefits');
       break;
   }
 
-  return keywords.filter(k => k.length > 2).slice(0, 4);
-}
-
-function hexToColorDescription(colors: { primary: string; secondary: string; accent: string; }): string[] {
-  const getColorName = (hex: string): string => {
-    const colorMap: Record<string, string> = {
-      '#FF0000': 'red', '#00FF00': 'green', '#0000FF': 'blue',
-      '#FFFF00': 'yellow', '#FF00FF': 'magenta', '#00FFFF': 'cyan',
-      '#FFA500': 'orange', '#800080': 'purple', '#FFC0CB': 'pink',
-      '#3B82F6': 'blue', '#10B981': 'green', '#F59E0B': 'amber',
-      '#EF4444': 'red', '#8B5CF6': 'purple'
-    };
-    
-    // Simple hex matching or fallback to brightness
-    const upper = hex.toUpperCase();
-    if (colorMap[upper]) return colorMap[upper];
-    
-    // Extract RGB values for basic color detection
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    
-    if (r > g && r > b) return 'red';
-    if (g > r && g > b) return 'green';
-    if (b > r && b > g) return 'blue';
-    if (r + g + b < 150) return 'dark';
-    if (r + g + b > 600) return 'bright';
-    return 'vibrant';
-  };
-
-  const descriptions = [];
-  descriptions.push(getColorName(colors.primary));
-  if (colors.secondary !== colors.primary) {
-    descriptions.push(getColorName(colors.secondary));
-  }
-  
-  return descriptions.slice(0, 2);
+  return keywords.slice(0, 5); // Limit for URL length
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
-import Navigation from '@/components/Navigation';
+import Sidebar from '@/components/Sidebar';
 
 interface InsightData {
   performanceOverview: {
@@ -143,10 +143,9 @@ const InsightsPage: React.FC = () => {
         <title>Insights - CreativePilot Pro</title>
       </Head>
 
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50">
-        <Navigation />
-
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <Sidebar>
+        <div className="bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 min-h-screen">
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Header */}
           <div className="flex justify-between items-center mb-8">
             <div>
@@ -406,8 +405,9 @@ const InsightsPage: React.FC = () => {
               </div>
             </div>
           )}
-        </main>
-      </div>
+          </main>
+        </div>
+      </Sidebar>
     </>
   );
 };
